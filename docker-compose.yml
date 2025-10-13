@@ -1,0 +1,39 @@
+version: '3.9'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ./ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+
+  ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    driver: bridge
