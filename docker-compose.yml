@@ -19,6 +19,8 @@ services:
     restart: unless-stopped
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+    networks:
+      - ai-network
 
   ai:
     build:
