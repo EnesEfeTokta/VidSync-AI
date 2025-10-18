@@ -32,7 +32,11 @@ services:
     depends_on:
       - ollama
     environment:
-      - OLLAMA_URL=http://ollama:11434
+      # GÜNCELLEME: Konfigürasyon modülü (config.py) ile uyumlu hale getirildi.
+      # main.py dosyasındaki ayarlar artık bu değişkenleri kullanıyor.
+      - AI_OLLAMA_BASE_URL=http://ollama:11434/api
+      - AI_OLLAMA_MODEL_ADI=mistral:7b
+      - AI_LOG_SEVIYESI=INFO 
     networks:
       - ai-network
 
