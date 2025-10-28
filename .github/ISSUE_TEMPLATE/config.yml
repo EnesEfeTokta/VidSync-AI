@@ -1,0 +1,6 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: ❓ Ask a General Question
+    url: https://github.com/enesefetokta/vidsync_backend/discussions
+    about: Please use this section for general questions that are not feature requests or bug reports.
