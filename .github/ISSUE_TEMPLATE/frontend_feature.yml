@@ -1,0 +1,25 @@
+name: 📝 New Task
+description: Create a new task for the project.
+title: "[TASK TITLE]: "
+labels: ["task"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 📝 Description
+      description: What is the purpose of this task? What needs to be done? Please provide all necessary context and details here.
+      placeholder: "In this task, an API endpoint will be created to allow users to reset their passwords..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: ✅ Acceptance Criteria
+      description: List the testable conditions that must be met for this task to be considered ‘completed’.
+      placeholder: |
+        - [ ] A reset link should be sent when the user enters their email address.
+        - [ ] An error message should be returned for invalid email addresses.
+        - [ ] The reset link should be valid for 1 hour.
+    validations:
+      required: true
