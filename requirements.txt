@@ -4,3 +4,5 @@ requests
 pydantic
 httpx
 pydantic-settings
+openai-whisper
+pydub
