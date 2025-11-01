@@ -32,11 +32,19 @@ services:
     depends_on:
       - ollama
     environment:
-      # GÜNCELLEME: Konfigürasyon modülü (config.py) ile uyumlu hale getirildi.
-      # main.py dosyasındaki ayarlar artık bu değişkenleri kullanıyor.
       - AI_OLLAMA_BASE_URL=http://ollama:11434/api
       - AI_OLLAMA_MODEL_ADI=mistral:7b
       - AI_LOG_SEVIYESI=INFO 
+    networks:
+      - ai-network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: vidsync_cloudflared
+    restart: unless-stopped
+    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - ai
     networks:
       - ai-network
 
