@@ -6,3 +6,4 @@ httpx
 pydantic-settings
 openai-whisper
 pydub
+websockets
