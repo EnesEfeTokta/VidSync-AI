@@ -8,8 +8,9 @@ import httpx
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
-from .config import ayarlar
-from .logging_setup import loglamayi_kur
+from config import ayarlar
+from logging_setup import loglamayi_kur
+from stt_service import StreamingSTTService
 
 loglamayi_kur()
 logger = logging.getLogger("ai-service")
@@ -17,7 +18,7 @@ logger = logging.getLogger("ai-service")
 app = FastAPI(
     title="AI Meeting Summarization & Transcription Service",
     description="Toplantı dökümlerini özetlemek ve gerçek zamanlı transkripsiyon yapmak için bir API.",
-    version="1.4.0"
+    version="1.5.0"
 )
 
 class Location(BaseModel):
@@ -126,7 +127,6 @@ async def summarize_conversation_endpoint(payload: MeetingPayload):
     transcript = format_transcript(payload)
     if not transcript:
         raise HTTPException(status_code=400, detail="Geçerli bir konuşma dökümü bulunamadı.")
-    
     dynamic_summary = await generate_summary_with_ollama(transcript, conversation_id)
     return DetailedSummaryResponse(summary=dynamic_summary, participants=payload.participants)
 
@@ -137,7 +137,6 @@ async def summarize_chat_endpoint(payload: ChatPayload):
     formatted_chat = format_chat_history(payload)
     if not formatted_chat:
         raise HTTPException(status_code=400, detail="Geçerli bir sohbet geçmişi bulunamadı.")
-    
     dynamic_summary = await generate_summary_with_ollama(formatted_chat, conversation_id)
     return DetailedSummaryResponse(summary=dynamic_summary, participants=payload.participants)
 
@@ -146,13 +145,21 @@ async def transcribe_endpoint(websocket: WebSocket):
     connection_id = str(uuid.uuid4())
     await websocket.accept()
     logger.info(f"WebSocket bağlantısı kuruldu: {connection_id}")
+    stt_service = StreamingSTTService(model_name="tiny")
+    
     try:
         while True:
             audio_data = await websocket.receive_bytes()
-            logger.info(f"Bağlantı {connection_id} üzerinden {len(audio_data)} byte ses verisi alındı.")
+            transcribed_text = stt_service.process_audio_chunk(audio_data)
+            if transcribed_text:
+                logger.info(f"[Transkript - {connection_id}]: {transcribed_text}")
+                
     except WebSocketDisconnect:
         logger.warning(f"WebSocket bağlantısı istemci tarafından kapatıldı: {connection_id}")
     except Exception as e:
         logger.error(f"WebSocket hatası {connection_id}: {e}", exc_info=True)
     finally:
+        final_text = stt_service.finalize_stream()
+        if final_text:
+            logger.info(f"[Son Transkript - {connection_id}]: {final_text}")
         logger.info(f"WebSocket bağlantısı sonlandırılıyor: {connection_id}")

@@ -1,9 +1,9 @@
 fastapi
 uvicorn
-requests
-pydantic
 httpx
+pydantic
 pydantic-settings
+python-dotenv
 openai-whisper
-pydub
+numpy
 websockets
