@@ -18,7 +18,7 @@ logger = logging.getLogger("ai-service")
 app = FastAPI(
     title="AI Meeting Summarization & Transcription Service",
     description="Toplantı dökümlerini özetlemek ve gerçek zamanlı transkripsiyon yapmak için bir API.",
-    version="1.5.0"
+    version="1.6.0"
 )
 
 class Location(BaseModel):
@@ -153,6 +153,7 @@ async def transcribe_endpoint(websocket: WebSocket):
             transcribed_text = stt_service.process_audio_chunk(audio_data)
             if transcribed_text:
                 logger.info(f"[Transkript - {connection_id}]: {transcribed_text}")
+                await websocket.send_json({"text": transcribed_text})
                 
     except WebSocketDisconnect:
         logger.warning(f"WebSocket bağlantısı istemci tarafından kapatıldı: {connection_id}")
@@ -162,4 +163,5 @@ async def transcribe_endpoint(websocket: WebSocket):
         final_text = stt_service.finalize_stream()
         if final_text:
             logger.info(f"[Son Transkript - {connection_id}]: {final_text}")
+            await websocket.send_json({"text": final_text})
         logger.info(f"WebSocket bağlantısı sonlandırılıyor: {connection_id}")
