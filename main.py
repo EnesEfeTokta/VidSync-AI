@@ -18,8 +18,8 @@ logger = logging.getLogger("ai-service")
 
 app = FastAPI(
     title="AI Meeting Summarization & Transcription Service",
-    description="Toplantı dökümlerini özetlemek ve gerçek zamanlı transkripsiyon yapmak için bir API.",
-    version="2.0.0"
+    description="Toplantı dökümlerini özetlemek, transkripsiyon yapmak ve soruları yanıtlamak için bir API.",
+    version="2.1.0"
 )
 
 class Location(BaseModel):
@@ -68,6 +68,12 @@ class ChatPayload(BaseModel):
     participants: List[Participant]
     chat_history: List[ChatMessage]
     metadata: Optional[Dict[str, Any]] = None
+
+class ChatbotQuery(BaseModel):
+    query: str
+
+class ChatbotResponse(BaseModel):
+    response: str
 
 def parse_llm_response(llm_response_text: str) -> Tuple[str, List[Reminder]]:
     try:
@@ -126,6 +132,30 @@ async def generate_summary_and_reminders(transcript: str, conversation_id: str) 
             logger.error(f"LLM isteği sırasında hata oluştu: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Özetleme servisiyle iletişimde bir hata oluştu.")
 
+async def generate_chatbot_response(user_query: str, conversation_id: str) -> str:
+    system_prompt = (
+        "Sen VidSync Assistant'sın; VidSync platformu hakkında soruları yanıtlamak için tasarlanmış yardımsever ve dost canlısı bir yapay zekasın. "
+        "VidSync, ekiplerin uzaktan birlikte çalışmasına yardımcı olan bir video konferans ve iş birliği aracıdır. Yüksek kaliteli video, gerçek zamanlı transkripsiyon ve yapay zeka destekli özetler gibi özelliklere sahiptir. "
+        "Cevaplarını kısa ve anlaşılır tut. Her zaman pozitif ve teşvik edici bir ton kullan."
+    )
+    full_prompt = f"{system_prompt}\n\n---\n\nKullanıcı Sorusu: {user_query}\n\nAsistan:"
+    ollama_url = ayarlar.OLLAMA_BASE_URL + "/generate"
+    model_name = ayarlar.OLLAMA_MODEL_ADI
+    logger.info(f"Ollama'ya chatbot isteği gönderiliyor. conversationId: {conversation_id}")
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        try:
+            response = await client.post(
+                ollama_url,
+                json={"model": model_name, "prompt": full_prompt, "stream": False}
+            )
+            response.raise_for_status()
+            response_data = response.json()
+            return response_data.get("response", "Üzgünüm, bir sorun oluştu ve bir yanıt üretemedim.").strip()
+        except Exception as e:
+            logger.error(f"Chatbot LLM isteği sırasında hata oluştu: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Chatbot servisiyle iletişimde bir hata oluştu.")
+
 @app.get("/")
 async def root():
     return {"message": "AI Service is running"}
@@ -147,18 +177,15 @@ async def summarize_endpoint(payload: MeetingPayload):
     
     return SummaryWithRemindersResponse(summary=summary, reminders=reminders, participants=payload.participants)
 
-@app.post("/summarize-chat", response_model=SummaryWithRemindersResponse, summary="Bir Sohbeti Özetler ve Hatırlatıcıları Çıkarır")
-async def summarize_chat_endpoint(payload: ChatPayload):
+@app.post("/chatbot", response_model=ChatbotResponse, summary="VidSync Chatbot ile Etkileşime Girer")
+async def chatbot_endpoint(payload: ChatbotQuery):
     conversation_id = str(uuid.uuid4())
-    logger.info(f"Yeni sohbet özeti ve hatırlatıcı isteği alındı. conversationId: {conversation_id}")
-    formatted_chat = format_chat_history(payload)
-    if not formatted_chat:
-        raise HTTPException(status_code=400, detail="Geçerli bir sohbet geçmişi bulunamadı.")
-    
-    raw_response = await generate_summary_and_reminders(formatted_chat, conversation_id)
-    summary, reminders = parse_llm_response(raw_response)
-    
-    return SummaryWithRemindersResponse(summary=summary, reminders=reminders, participants=payload.participants)
+    logger.info(f"Yeni chatbot sorgusu alındı: '{payload.query}'. conversationId: {conversation_id}")
+    if not payload.query or not payload.query.strip():
+        raise HTTPException(status_code=400, detail="Sorgu boş olamaz.")
+
+    llm_response = await generate_chatbot_response(payload.query, conversation_id)
+    return ChatbotResponse(response=llm_response)
 
 @app.websocket("/transcribe")
 async def transcribe_endpoint(websocket: WebSocket):
