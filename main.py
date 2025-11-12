@@ -47,6 +47,10 @@ class SummaryWithRemindersResponse(BaseModel):
     reminders: List[Reminder]
     participants: List[Participant]
 
+class SimpleSummaryResponse(BaseModel):
+    summary: str
+    participants: List[Participant]
+
 class TranscriptEntry(BaseModel):
     start_time: float
     end_time: float
@@ -108,6 +112,32 @@ def format_chat_history(payload: ChatPayload) -> str:
         sender_name = participant_names.get(message.sender_id, "Bilinmeyen Katılımcı")
         chat_lines.append(f"{sender_name}: {message.message}")
     return "\n".join(chat_lines)
+
+async def generate_simple_summary_with_ollama(transcript: str, conversation_id: str) -> str:
+    system_prompt = (
+        "Sen uzman bir toplantı asistanısın. Lütfen aşağıdaki konuşmanın kısa ve profesyonel bir özetini çıkar. "
+        "Özet, konuşmanın ana temalarını, önemli noktalarını ve sonuçlarını yansıtmalıdır."
+    )
+    full_prompt = f"{system_prompt}\n\n---\n\n{transcript}"
+    ollama_url = ayarlar.OLLAMA_BASE_URL + "/generate"
+    model_name = ayarlar.OLLAMA_MODEL_ADI
+    logger.info(f"Ollama'ya basit özet isteği gönderiliyor. conversationId: {conversation_id}")
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        try:
+            response = await client.post(
+                ollama_url,
+                json={"model": model_name, "prompt": full_prompt, "stream": False}
+            )
+            response.raise_for_status()
+            response_data = response.json()
+            summary_text = response_data.get("response", "").strip()
+            if not summary_text:
+                raise ValueError("Ollama'dan boş bir özet yanıtı alındı.")
+            logger.info(f"Basit özet başarılı bir şekilde oluşturuldu. conversationId: {conversation_id}")
+            return summary_text
+        except Exception:
+            logger.error(f"Basit özetleme sırasında beklenmedik bir hata oluştu. conversationId: {conversation_id}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Basit özetleme sırasında beklenmedik bir sunucu hatası oluştu.")
 
 async def generate_summary_and_reminders(transcript: str, conversation_id: str) -> str:
     system_prompt = (
@@ -176,6 +206,16 @@ async def summarize_endpoint(payload: MeetingPayload):
     summary, reminders = parse_llm_response(raw_response)
     
     return SummaryWithRemindersResponse(summary=summary, reminders=reminders, participants=payload.participants)
+
+@app.post("/summarize-chat", response_model=SimpleSummaryResponse, summary="Bir Metin Sohbetinin Basit Özetini Yapar")
+async def summarize_chat_endpoint(payload: ChatPayload):
+    conversation_id = str(uuid.uuid4())
+    logger.info(f"Yeni sohbet geçmişi özet isteği alındı. conversationId: {conversation_id}")
+    formatted_chat = format_chat_history(payload)
+    if not formatted_chat:
+        raise HTTPException(status_code=400, detail="Geçerli bir sohbet geçmişi bulunamadı.")
+    simple_summary = await generate_simple_summary_with_ollama(formatted_chat, conversation_id)
+    return SimpleSummaryResponse(summary=simple_summary, participants=payload.participants)
 
 @app.post("/chatbot", response_model=ChatbotResponse, summary="VidSync Chatbot ile Etkileşime Girer")
 async def chatbot_endpoint(payload: ChatbotQuery):
